@@ -1,0 +1,33 @@
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Variables de entorno
+.env
+.env.*
+!.env.template
+
+# Alembic (las migraciones SÍ se versionan; esto es solo caché/temporales si los hubiera)
+# (no se ignora alembic/versions/, esas migraciones deben subirse al repo)
+
+# IDEs
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
