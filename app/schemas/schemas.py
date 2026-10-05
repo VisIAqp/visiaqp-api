@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -42,3 +42,34 @@ class CamaraResponse(CamaraBase):
 
     class Config:
         from_attributes = True
+
+# ==================== SCHEMAS CONTEOS Y PROCESAMIENTO ====================
+
+class ResultadoDeteccionCreate(BaseModel):
+    periodo_inicio: datetime
+    periodo_fin: datetime
+    cantidad_peatones: int = Field(..., ge=0)
+    confianza_promedio: Optional[float] = Field(None, ge=0.0, le=100.0)
+
+class ResultadoDeteccionResponse(ResultadoDeteccionCreate):
+    id_resultado: int
+    id_procesamiento: int
+    fecha_registro: datetime
+
+    class Config:
+        from_attributes = True
+
+# Esquema principal para recibir las detecciones completas enviadas por la IA
+class ConteosLoteCreate(BaseModel):
+    id_zona: int
+    id_camara: Optional[int] = None
+    id_usuario: Optional[int] = None
+    tipo_fuente: str = Field(..., description="imagen, video o stream")
+    ruta_archivo: Optional[str] = None
+    fecha_captura_inicio: datetime
+    detecciones: List[ResultadoDeteccionCreate]
+
+class ConteosLoteResponse(BaseModel):
+    mensaje: str
+    id_procesamiento: int
+    total_registros_guardados: int

@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+
 from app.db.database import get_db
 from app.models.models import Zona
-from app.api import zonas, camaras
+from app.api import zonas, camaras, conteos
 
 app = FastAPI(
     title="VisIAqp API Backend",
@@ -14,6 +15,7 @@ app = FastAPI(
 # Incluir los Routers
 app.include_router(zonas.router)
 app.include_router(camaras.router)
+app.include_router(conteos.router)
 
 @app.get("/", tags=["General"])
 def root():
