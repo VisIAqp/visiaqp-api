@@ -7,8 +7,8 @@ from app.models.models import Camara, Zona
 from app.schemas.schemas import CamaraCreate, CamaraResponse
 
 router = APIRouter(
-    prefix="/api/v1/camaras",
-    tags=["Cámaras (CU011)"]
+    prefix="/api/camaras",
+    tags=["Cámaras"]
 )
 
 @router.get("/", response_model=List[CamaraResponse])

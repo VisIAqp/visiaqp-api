@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.models import Zona
-from app.api import zonas, camaras, conteos
+from app.api import zonas, camaras, conteos, indicadores, procesamientos, auth
 
 app = FastAPI(
     title="VisIAqp API Backend",
@@ -16,6 +16,9 @@ app = FastAPI(
 app.include_router(zonas.router)
 app.include_router(camaras.router)
 app.include_router(conteos.router)
+app.include_router(indicadores.router)
+app.include_router(procesamientos.router)
+app.include_router(auth.router)
 
 @app.get("/", tags=["General"])
 def root():

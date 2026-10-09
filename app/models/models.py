@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Numeric, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Numeric, Text, JSON, UniqueConstraint, ForeignKeyConstraint
 from sqlalchemy.sql import func
 from app.db.database import Base
 
@@ -27,7 +27,6 @@ class Zona(Base):
     descripcion = Column(String(255), nullable=True)
     ubicacion = Column(String(150), nullable=True)
     pais = Column(String(2), default='PE')
-    # Corregido: Decimal -> Numeric
     latitud = Column(Numeric(10, 7), nullable=True)
     longitud = Column(Numeric(10, 7), nullable=True)
     estado = Column(Enum('activa', 'inactiva', name='estado_zona_enum'), default='activa')
@@ -46,6 +45,10 @@ class Camara(Base):
     ultima_conexion = Column(DateTime, nullable=True)
     fecha_registro = Column(DateTime, default=func.now())
 
+    __table_args__ = (
+        UniqueConstraint('id_camara', 'id_zona', name='uq_camara_id_zona'),
+    )
+
 class Procesamiento(Base):
     __tablename__ = "procesamiento"
     id_procesamiento = Column(Integer, primary_key=True, autoincrement=True)
@@ -59,6 +62,18 @@ class Procesamiento(Base):
     fecha_fin_proceso = Column(DateTime, nullable=True)
     estado = Column(Enum('pendiente', 'procesando', 'completado', 'error', name='estado_procesamiento_enum'), default='pendiente')
     mensaje_error = Column(Text, nullable=True)
+    fecha_registro = Column(DateTime, default=func.now())
+
+    # Agregada la restricción de Clave Foránea Compuesta requerida por MySQL
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['id_camara', 'id_zona'],
+            ['camara.id_camara', 'camara.id_zona'],
+            name='fk_proc_camara_zona',
+            onupdate="CASCADE",
+            ondelete="RESTRICT"
+        ),
+    )
 
 class ResultadoDeteccion(Base):
     __tablename__ = "resultado_deteccion"
@@ -67,5 +82,5 @@ class ResultadoDeteccion(Base):
     periodo_inicio = Column(DateTime, nullable=False)
     periodo_fin = Column(DateTime, nullable=False)
     cantidad_peatones = Column(Integer, nullable=False)
-    # Corregido: Decimal -> Numeric
     confianza_promedio = Column(Numeric(5, 2), nullable=True)
+    fecha_registro = Column(DateTime, default=func.now())

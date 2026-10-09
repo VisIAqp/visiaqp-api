@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List
 from datetime import datetime
 
@@ -73,3 +73,45 @@ class ConteosLoteResponse(BaseModel):
     mensaje: str
     id_procesamiento: int
     total_registros_guardados: int
+
+# ==================== SCHEMAS INDICADORES Y DASHBOARD ====================
+
+class DashboardMétricasResponse(BaseModel):
+    total_peatones_hoy: int
+    zona_mas_concurrida: Optional[str] = "N/A"
+    horario_pico: Optional[str] = "N/A"
+    nivel_concentracion_actual: str = "Bajo"
+
+class ResultadoConsultaResponse(BaseModel):
+    id_resultado: int
+    zona_nombre: str
+    camara_nombre: Optional[str] = None
+    periodo_inicio: datetime
+    periodo_fin: datetime
+    cantidad_peatones: int
+    confianza_promedio: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+# ==================== SCHEMAS AUTENTICACIÓN ====================
+
+class LoginRequest(BaseModel):
+    username_o_email: str
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    id_usuario: int
+    username: str
+    nombre_completo: str
+    rol: str
+
+class UsuarioCreate(BaseModel):
+    id_rol: int
+    nombres: str
+    apellidos: str
+    username: str
+    email: EmailStr
+    password: str
