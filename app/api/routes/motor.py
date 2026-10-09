@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import logging
 
+from app.services import indicador_service
 from app.api.deps import verificar_api_key_motor
 from app.core.database import get_db
 from app.crud import camara as crud_camara
@@ -15,8 +17,10 @@ from app.schemas.procesamiento import (
 )
 from app.schemas.resultado_deteccion import ResultadoCreado, ResultadoCreate
 
+logger = logging.getLogger(__name__)
+
 # Contrato con visiaqp-ai: NO cambiar rutas ni payloads sin avisar.
-router = APIRouter(tags=["motor"], dependencies=[Depends(verificar_api_key_motor())])
+router = APIRouter(tags=["motor"], dependencies=[Depends(verificar_api_key_motor)])
 
 
 @router.get("/camaras", response_model=list[CamaraMotor])
@@ -64,8 +68,18 @@ def registrar_resultado(
             detail="id_zona/id_camara no coinciden con el procesamiento",
         )
 
+    id_zona = proc.id_zona  # se lee antes del commit, que expira el objeto
     resultado = crud_resultado.crear(db, id_procesamiento, datos)
-    return {"id_resultado": resultado.id_resultado}
+    id_resultado = resultado.id_resultado
+
+    # El resultado ya está guardado: si el recálculo falla no se rompe el contrato con el motor
+    try:
+        indicador_service.actualizar_indicadores(db, id_zona, datos.periodo_inicio)
+    except Exception:
+        db.rollback()
+        logger.exception("Falló el recálculo de indicadores (zona %s)", id_zona)
+
+    return {"id_resultado": id_resultado}
 
 
 @router.patch("/procesamientos/{id_procesamiento}", response_model=ProcesamientoCerrado)
