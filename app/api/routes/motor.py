@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import verificar_api_key_motor
 from app.core.database import get_db
 from app.crud import camara as crud_camara
 from app.crud import procesamiento as crud_proc
@@ -15,7 +16,7 @@ from app.schemas.procesamiento import (
 from app.schemas.resultado_deteccion import ResultadoCreado, ResultadoCreate
 
 # Contrato con visiaqp-ai: NO cambiar rutas ni payloads sin avisar.
-router = APIRouter(tags=["motor"])
+router = APIRouter(tags=["motor"], dependencies=[Depends(verificar_api_key_motor())])
 
 
 @router.get("/camaras", response_model=list[CamaraMotor])
