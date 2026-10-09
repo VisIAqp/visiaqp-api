@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Seguridad
+    MOTOR_API_KEY: str = ""
+    CORS_ORIGINS: str = "http://localhost:4200"
+
     # Aplicación
     APP_NAME: str = "VisIAqp API"
     DEBUG: bool = False
