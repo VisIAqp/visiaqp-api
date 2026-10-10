@@ -15,8 +15,8 @@ def crear(db: Session, id_procesamiento: int, datos: ResultadoCreate) -> Resulta
 
     resultado = ResultadoDeteccion(
         id_procesamiento=id_procesamiento,
-        periodo_inicio=datos.periodo_inicio,
-        periodo_fin=datos.periodo_fin,
+        periodo_inicio=datos.periodo_inicio.replace(microsecond=0),
+        periodo_fin=datos.periodo_fin.replace(microsecond=0),
         cantidad_peatones=datos.cantidad_peatones,
         confianza_promedio=confianza,
     )
