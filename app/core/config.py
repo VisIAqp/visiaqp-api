@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # Base de datos
     DATABASE_URL: str
+    TEST_DATABASE_URL: str = ""
 
     # Autenticación
     SECRET_KEY: str

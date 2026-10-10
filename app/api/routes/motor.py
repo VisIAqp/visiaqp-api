@@ -37,7 +37,7 @@ def crear_procesamiento(datos: ProcesamientoCreate, db: Session = Depends(get_db
     if datos.id_camara is not None:
         if not crud_camara.obtener_en_zona(db, datos.id_camara, datos.id_zona):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="La cámara no existe o no pertenece a la zona indicada",
             )
     proc = crud_proc.crear(db, datos)
@@ -74,7 +74,9 @@ def registrar_resultado(
 
     # El resultado ya está guardado: si el recálculo falla no se rompe el contrato con el motor
     try:
-        indicador_service.actualizar_indicadores(db, id_zona, datos.periodo_inicio)
+        indicador_service.actualizar_indicadores(
+            db, id_zona, datos.periodo_inicio.replace(microsecond=0)
+        )
     except Exception:
         db.rollback()
         logger.exception("Falló el recálculo de indicadores (zona %s)", id_zona)
