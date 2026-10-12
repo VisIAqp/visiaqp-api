@@ -16,6 +16,9 @@ from app.schemas.procesamiento import (
     ProcesamientoCreate,
 )
 from app.schemas.resultado_deteccion import ResultadoCreado, ResultadoCreate
+from app.crud import video as crud_video
+from app.schemas.procesamiento import PendienteMotor
+from app.schemas.video import SincronizarRequest, SincronizarResultado
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +96,35 @@ def cerrar_procesamiento(
         raise HTTPException(status_code=404, detail="Procesamiento no encontrado")
     proc = crud_proc.cerrar(db, proc, datos)
     return {"id_procesamiento": proc.id_procesamiento, "estado": proc.estado}
+
+
+@router.post("/videos/sincronizar", response_model=SincronizarResultado)
+def sincronizar_videos(datos: SincronizarRequest, db: Session = Depends(get_db)):
+    return crud_video.sincronizar(db, datos.videos)
+
+
+@router.get("/procesamientos/pendientes", response_model=list[PendienteMotor])
+def listar_pendientes(db: Session = Depends(get_db)):
+    return [
+        PendienteMotor(
+            id_procesamiento=p.id_procesamiento,
+            id_zona=p.id_zona,
+            id_camara=p.id_camara,
+            nombre_camara=nombre_camara,
+            nombre_archivo=p.ruta_archivo or "",
+            fecha_captura_inicio=p.fecha_captura_inicio,
+            zone_polygon=poligono,
+        )
+        for p, nombre_camara, poligono in crud_proc.listar_pendientes(db)
+    ]
+
+
+@router.patch(
+    "/procesamientos/{id_procesamiento}/iniciar", response_model=ProcesamientoCerrado
+)
+def iniciar_procesamiento(id_procesamiento: int, db: Session = Depends(get_db)):
+    if crud_proc.reclamar(db, id_procesamiento):
+        return {"id_procesamiento": id_procesamiento, "estado": "procesando"}
+    if crud_proc.obtener(db, id_procesamiento) is None:
+        raise HTTPException(status_code=404, detail="Procesamiento no encontrado")
+    raise HTTPException(status_code=409, detail="El procesamiento ya no está pendiente")

@@ -6,6 +6,7 @@ from app.models.procesamiento import Procesamiento
 from app.models.resultado_deteccion import ResultadoDeteccion
 from app.models.indicador import Indicador
 from app.models.umbral_concentracion import UmbralConcentracion
+from app.models.video_disponible import VideoDisponible
 
 __all__ = [
     "Rol",
@@ -16,4 +17,5 @@ __all__ = [
     "ResultadoDeteccion",
     "Indicador",
     "UmbralConcentracion",
+    "VideoDisponible",
 ]

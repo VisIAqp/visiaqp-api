@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
 from app.models import Camara, UmbralConcentracion, Zona
+from app.core.security import crear_access_token
+from app.models import Rol, Usuario
 
 API_KEY_TEST = "clave-de-prueba"
 
@@ -102,3 +104,42 @@ def datos_base(client, abrir_sesion):
             "id_camara": cam.id_camara,
             "id_camara_otra_zona": cam_otra_zona.id_camara,
         }
+
+
+@pytest.fixture
+def usuarios(client, abrir_sesion):
+    """Un admin y dos analistas, con sus headers JWT."""
+    with abrir_sesion() as db:
+        rol_admin = Rol(nombre="Administrador")
+        rol_analista = Rol(nombre="Analista")
+        db.add_all([rol_admin, rol_analista])
+        db.flush()
+
+        def nuevo(username: str, rol: Rol) -> Usuario:
+            u = Usuario(
+                id_rol=rol.id_rol,
+                nombres="Test",
+                apellidos="Usuario",
+                username=username,
+                email=f"{username}@test.pe",
+                password_hash="no-se-usa-en-tests",
+            )
+            db.add(u)
+            return u
+
+        admin = nuevo("admin", rol_admin)
+        ana = nuevo("ana", rol_analista)
+        beto = nuevo("beto", rol_analista)
+        db.flush()
+
+        def datos(u: Usuario, rol: str) -> dict:
+            token = crear_access_token(u.id_usuario, rol)
+            return {"headers": {"Authorization": f"Bearer {token}"}, "id": u.id_usuario}
+
+        resultado = {
+            "admin": datos(admin, "Administrador"),
+            "ana": datos(ana, "Analista"),
+            "beto": datos(beto, "Analista"),
+        }
+        db.commit()
+        return resultado
