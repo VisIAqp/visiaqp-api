@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Enum, ForeignKey, Numeric, UniqueConstraint, func
+from sqlalchemy import Enum, ForeignKey, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -30,6 +30,11 @@ class Indicador(Base):
     nivel_concentracion: Mapped[str] = mapped_column(
         Enum("bajo", "medio", "alto", name="indicador_nivel"), nullable=False
     )
+    promedio_presentes: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    max_presentes: Mapped[int | None] = mapped_column()
+    segundos_observados: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    nivel_ocupacion: Mapped[str | None] = mapped_column(String(10))
+    estado_ocupacion: Mapped[str] = mapped_column(String(40), server_default="sin_datos")
     fecha_calculo: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
     )

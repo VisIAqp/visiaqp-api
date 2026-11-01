@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
+from app.core.config import settings
+
 _CREDENCIALES = re.compile(r"(\w+://)[^/\s@]+@")
 
 
@@ -23,6 +25,13 @@ class ProcesamientoCierre(BaseModel):
     estado: Literal["completado", "error"]
     fecha_fin_proceso: datetime | None = None
     mensaje_error: str | None = None
+
+
+class ActividadMotor(BaseModel):
+    ultima_muestra: datetime | None = None
+    fps_procesamiento: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    # Edad desde la recepción local, no latencia desde el sensor de la cámara.
+    retraso_seg: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class ProcesamientoCerrado(BaseModel):
@@ -53,6 +62,7 @@ class PendienteMotor(BaseModel):
     nombre_archivo: str
     fecha_captura_inicio: datetime
     zone_polygon: list[list[float]] | None = None
+    intervalo_muestreo_seg: int = 60
 
 
 class ProcesamientoOut(BaseModel):
@@ -70,6 +80,11 @@ class ProcesamientoOut(BaseModel):
     estado: Literal["pendiente", "procesando", "completado", "error"]
     mensaje_error: str | None
     fecha_registro: datetime
+    inactividad_limite_seg: int = Field(default_factory=lambda: settings.MOTOR_INACTIVIDAD_SEG)
+    ultima_actividad: datetime | None = None
+    ultima_muestra: datetime | None = None
+    fps_procesamiento: float | None = None
+    retraso_seg: float | None = None
 
     @field_validator("mensaje_error")
     @classmethod

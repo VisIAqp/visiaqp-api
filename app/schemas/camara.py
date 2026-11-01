@@ -12,6 +12,7 @@ class CamaraMotor(BaseModel):
     id_camara: int
     id_zona: int
     nombre: str
+    intervalo_muestreo_seg: int = 60
     url_stream: str
     zone_polygon: list[list[float]] | None = None
     estado: Literal["activa", "inactiva", "mantenimiento"]

@@ -10,6 +10,7 @@ from app.crud import procesamiento as crud_proc
 from app.crud import resultado_deteccion as crud_resultado
 from app.schemas.camara import CamaraMotor
 from app.schemas.procesamiento import (
+    ActividadMotor,
     ProcesamientoCerrado,
     ProcesamientoCierre,
     ProcesamientoCreado,
@@ -43,7 +44,11 @@ def crear_procesamiento(datos: ProcesamientoCreate, db: Session = Depends(get_db
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="La cámara no existe o no pertenece a la zona indicada",
             )
-    proc = crud_proc.crear(db, datos)
+    try:
+        proc = crud_proc.crear(db, datos)
+    except ValueError as error:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(error))
     return {"id_procesamiento": proc.id_procesamiento}
 
 
@@ -55,7 +60,7 @@ def crear_procesamiento(datos: ProcesamientoCreate, db: Session = Depends(get_db
 def registrar_resultado(
     id_procesamiento: int, datos: ResultadoCreate, db: Session = Depends(get_db)
 ):
-    proc = crud_proc.obtener(db, id_procesamiento)
+    proc = crud_proc.obtener_vigente(db, id_procesamiento)
     if not proc:
         raise HTTPException(status_code=404, detail="Procesamiento no encontrado")
     if proc.estado != "procesando":
@@ -72,7 +77,12 @@ def registrar_resultado(
         )
 
     id_zona = proc.id_zona  # se lee antes del commit, que expira el objeto
-    resultado = crud_resultado.crear(db, id_procesamiento, datos)
+    crud_proc.registrar_actividad(db, proc)
+    try:
+        resultado = crud_resultado.crear(db, id_procesamiento, datos)
+    except ValueError as error:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(error))
     id_resultado = resultado.id_resultado
 
     # El resultado ya está guardado: si el recálculo falla no se rompe el contrato con el motor
@@ -91,7 +101,7 @@ def registrar_resultado(
 def cerrar_procesamiento(
     id_procesamiento: int, datos: ProcesamientoCierre, db: Session = Depends(get_db)
 ):
-    proc = crud_proc.obtener(db, id_procesamiento)
+    proc = crud_proc.obtener_vigente(db, id_procesamiento)
     if not proc:
         raise HTTPException(status_code=404, detail="Procesamiento no encontrado")
     proc = crud_proc.cerrar(db, proc, datos)
@@ -114,8 +124,9 @@ def listar_pendientes(db: Session = Depends(get_db)):
             nombre_archivo=p.ruta_archivo or "",
             fecha_captura_inicio=p.fecha_captura_inicio,
             zone_polygon=poligono,
+            intervalo_muestreo_seg=intervalo,
         )
-        for p, nombre_camara, poligono in crud_proc.listar_pendientes(db)
+        for p, nombre_camara, poligono, intervalo in crud_proc.listar_pendientes(db)
     ]
 
 
@@ -128,3 +139,14 @@ def iniciar_procesamiento(id_procesamiento: int, db: Session = Depends(get_db)):
     if crud_proc.obtener(db, id_procesamiento) is None:
         raise HTTPException(status_code=404, detail="Procesamiento no encontrado")
     raise HTTPException(status_code=409, detail="El procesamiento ya no está pendiente")
+
+@router.patch("/procesamientos/{id_procesamiento}/actividad", response_model=ProcesamientoCerrado)
+def actividad_motor(id_procesamiento: int, datos: ActividadMotor, db: Session = Depends(get_db)):
+    proc = crud_proc.obtener_vigente(db, id_procesamiento)
+    if proc is None:
+        raise HTTPException(status_code=404, detail="Procesamiento no encontrado")
+    if proc.estado != "procesando":
+        raise HTTPException(status_code=409, detail="La reserva ya no está vigente")
+    crud_proc.registrar_actividad(db, proc, datos)
+    db.commit()
+    return {"id_procesamiento": proc.id_procesamiento, "estado": proc.estado}
