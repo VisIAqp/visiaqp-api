@@ -16,6 +16,11 @@ class IndicadorOut(BaseModel):
     promedio_peatones: float
     max_peatones: int
     nivel_concentracion: Literal["bajo", "medio", "alto"]
+    promedio_presentes: float | None = None
+    max_presentes: int | None = None
+    segundos_observados: float | None = None
+    nivel_ocupacion: Literal["bajo", "medio", "alto"] | None = None
+    estado_ocupacion: str = "sin_datos"
 
 
 class IndicadorActual(IndicadorOut):

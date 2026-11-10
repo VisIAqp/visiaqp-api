@@ -71,6 +71,38 @@ def recalcular(db: Session, id_zona: int, momento: datetime, tipo: str) -> bool:
     medio, alto = _umbrales(db, id_zona)
     nivel = clasificar(promedio, medio, alto)
 
+    # No inferir ocupación a partir de los IDs históricos ni sumar vistas
+    # de varias cámaras sin una política espacial de fusión.
+    ocupacion_stmt = (
+        select(
+            func.sum(ResultadoDeteccion.promedio_presentes * ResultadoDeteccion.segundos_observados),
+            func.sum(ResultadoDeteccion.segundos_observados),
+            func.max(ResultadoDeteccion.max_presentes),
+            func.count(ResultadoDeteccion.promedio_presentes),
+            func.count(func.distinct(Procesamiento.id_camara)),
+            func.count(func.distinct(Procesamiento.tipo_fuente)),
+            func.count(Procesamiento.id_camara),
+        )
+        .select_from(ResultadoDeteccion)
+        .join(Procesamiento, Procesamiento.id_procesamiento == ResultadoDeteccion.id_procesamiento)
+        .where(Procesamiento.id_zona == id_zona,
+               ResultadoDeteccion.periodo_inicio >= inicio,
+               ResultadoDeteccion.periodo_inicio < fin)
+    )
+    ponderada, segundos, pico, modernas, camaras, fuentes, con_camara = db.execute(ocupacion_stmt).one()
+    presentes = max_presentes = nivel_ocupacion = segundos_validos = None
+    estado = "sin_datos"
+    if modernas:
+        if camaras != 1 or con_camara != cantidad or fuentes != 1:
+            estado = "fuentes_sin_consolidar"
+        elif modernas != cantidad:
+            estado = "datos_incompletos"
+        elif segundos and segundos > 0:
+            presentes = (Decimal(ponderada) / Decimal(segundos)).quantize(Decimal("0.0001"))
+            max_presentes, segundos_validos = int(pico), segundos
+            nivel_ocupacion = clasificar(presentes, medio, alto)
+            estado = "disponible"
+
     insert_stmt = mysql_insert(Indicador).values(
         id_zona=id_zona,
         periodo_tipo=tipo,
@@ -80,6 +112,11 @@ def recalcular(db: Session, id_zona: int, momento: datetime, tipo: str) -> bool:
         promedio_peatones=promedio,
         max_peatones=int(maximo),
         nivel_concentracion=nivel,
+        promedio_presentes=presentes,
+        max_presentes=max_presentes,
+        segundos_observados=segundos_validos,
+        nivel_ocupacion=nivel_ocupacion,
+        estado_ocupacion=estado,
     )
     upsert = insert_stmt.on_duplicate_key_update(
         periodo_fin=insert_stmt.inserted.periodo_fin,
@@ -87,6 +124,11 @@ def recalcular(db: Session, id_zona: int, momento: datetime, tipo: str) -> bool:
         promedio_peatones=insert_stmt.inserted.promedio_peatones,
         max_peatones=insert_stmt.inserted.max_peatones,
         nivel_concentracion=insert_stmt.inserted.nivel_concentracion,
+        promedio_presentes=insert_stmt.inserted.promedio_presentes,
+        max_presentes=insert_stmt.inserted.max_presentes,
+        segundos_observados=insert_stmt.inserted.segundos_observados,
+        nivel_ocupacion=insert_stmt.inserted.nivel_ocupacion,
+        estado_ocupacion=insert_stmt.inserted.estado_ocupacion,
         fecha_calculo=func.now(),
     )
     db.execute(upsert)

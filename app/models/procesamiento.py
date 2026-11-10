@@ -5,6 +5,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     String,
+    Numeric,
     Text,
     func,
 )
@@ -45,6 +46,10 @@ class Procesamiento(Base):
         server_default="pendiente",
     )
     mensaje_error: Mapped[str | None] = mapped_column(Text)
+    ultima_actividad: Mapped[datetime | None] = mapped_column()
+    ultima_muestra: Mapped[datetime | None] = mapped_column()
+    fps_procesamiento: Mapped[float | None] = mapped_column(Numeric(10, 3))
+    retraso_seg: Mapped[float | None] = mapped_column(Numeric(12, 3))
     fecha_registro: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
     )

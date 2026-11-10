@@ -19,3 +19,4 @@ __all__ = [
     "UmbralConcentracion",
     "VideoDisponible",
 ]
+from app.models.contexto import ClimaHora, EventoCalendario, SincronizacionContexto
