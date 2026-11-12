@@ -4,6 +4,7 @@ from threading import Barrier
 
 from sqlalchemy import select
 
+from app.core.tiempo import ahora_lima
 from app.models import Procesamiento, ResultadoDeteccion
 from tests.test_motor import _payload_proc, _payload_resultado
 
@@ -33,7 +34,7 @@ def test_reserva_stream_es_exclusiva_incluso_con_solicitudes_simultaneas(client,
 def test_camara_vencida_puede_ser_reservada_y_motor_antiguo_no_revive(client, motor_headers, datos_base, abrir_sesion):
     id_antiguo = crear_stream(client, motor_headers, datos_base).json()['id_procesamiento']
     with abrir_sesion() as db:
-        db.get(Procesamiento, id_antiguo).ultima_actividad = datetime.now() - timedelta(minutes=3)
+        db.get(Procesamiento, id_antiguo).ultima_actividad = ahora_lima() - timedelta(minutes=3)
         db.commit()
     nueva = crear_stream(client, motor_headers, datos_base)
     assert nueva.status_code == 201
@@ -78,7 +79,7 @@ def test_listado_cierra_video_abandonado_sin_reencolarlo_ni_borrar_resultados(cl
     respuesta = client.post('/api/procesamientos', headers=motor_headers, json=_payload_proc(datos_base))
     id_proc = respuesta.json()['id_procesamiento']
     with abrir_sesion() as db:
-        db.get(Procesamiento, id_proc).ultima_actividad = datetime.now() - timedelta(minutes=3)
+        db.get(Procesamiento, id_proc).ultima_actividad = ahora_lima() - timedelta(minutes=3)
         db.commit()
     filas = client.get('/api/procesamientos', headers=usuarios['ana']['headers']).json()
     assert next(p for p in filas if p['id_procesamiento'] == id_proc)['estado'] == 'error'

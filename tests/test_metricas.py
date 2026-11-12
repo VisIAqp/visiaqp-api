@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from app.core.tiempo import ahora_lima
 from app.models import Procesamiento, ResultadoDeteccion
 
 
@@ -148,8 +149,8 @@ def test_resumen_completo_no_limitado_a_500_ejecuciones(client, usuarios, medici
 def test_estado_camaras_expira_ejecucion_y_no_expone_url(client, usuarios, datos_base, abrir_sesion):
     with abrir_sesion() as db:
         p = Procesamiento(id_zona=datos_base['id_zona'], id_camara=datos_base['id_camara'],
-            tipo_fuente='stream', estado='procesando', fecha_captura_inicio=datetime.now(),
-            ultima_actividad=datetime.now() - timedelta(minutes=3), fps_procesamiento=2)
+            tipo_fuente='stream', estado='procesando', fecha_captura_inicio=ahora_lima(),
+            ultima_actividad=ahora_lima() - timedelta(minutes=3), fps_procesamiento=2)
         db.add(p)
         db.commit()
     respuesta = client.get('/api/metricas/estado-camaras', headers=usuarios['ana']['headers'])
@@ -228,13 +229,13 @@ def test_varias_camaras_no_generan_total_de_ocupacion(client, usuarios, medicion
 def test_estado_actual_no_confunde_video_reciente_con_transmision(client, usuarios, mediciones, datos_base, abrir_sesion):
     with abrir_sesion() as db:
         p = Procesamiento(id_zona=datos_base['id_zona'], id_camara=datos_base['id_camara'],
-            tipo_fuente='stream', estado='procesando', fecha_captura_inicio=datetime.now(),
-            ultima_actividad=datetime.now(), fps_procesamiento=2, retraso_seg=0)
+            tipo_fuente='stream', estado='procesando', fecha_captura_inicio=ahora_lima(),
+            ultima_actividad=ahora_lima(), fps_procesamiento=2, retraso_seg=0)
         db.add(p)
         db.commit()
         id_stream = p.id_procesamiento
         db.add(Procesamiento(id_zona=datos_base['id_zona'], id_camara=datos_base['id_camara'],
-            tipo_fuente='video', estado='completado', fecha_captura_inicio=datetime.now()))
+            tipo_fuente='video', estado='completado', fecha_captura_inicio=ahora_lima()))
         db.commit()
     respuesta = client.get('/api/metricas/estado-camaras', params={'id_camara': datos_base['id_camara'], 'limite': 1},
                            headers=usuarios['ana']['headers'])
