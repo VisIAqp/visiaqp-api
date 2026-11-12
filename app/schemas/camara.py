@@ -16,6 +16,7 @@ class CamaraMotor(BaseModel):
     url_stream: str
     zone_polygon: list[list[float]] | None = None
     estado: Literal["activa", "inactiva", "mantenimiento"]
+    firma_captura: str
 
 
 def _validar_poligono(v: list[list[float]] | None):

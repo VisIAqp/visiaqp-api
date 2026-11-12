@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.tiempo import ahora_lima
 from app.crud import metricas, procesamiento
 from app.models.camara import Camara
 from app.models.procesamiento import Procesamiento
@@ -40,7 +41,7 @@ def filtros(
     tipo_fuente: Literal['imagen', 'video', 'stream'] | None = None,
     db: Session = Depends(get_db),
 ):
-    hasta = hasta or datetime.now()
+    hasta = hasta or ahora_lima()
     if hasta.year < 1000:
         raise HTTPException(status_code=422, detail='Las fechas deben pertenecer al rango DATETIME de MySQL, desde el año 1000')
     desde = desde or hasta - timedelta(days=7)
@@ -65,7 +66,7 @@ def filtros(
 
 
 def contexto(f):
-    return dict(desde=f.desde, hasta=f.hasta, consultado_en=datetime.now())
+    return dict(desde=f.desde, hasta=f.hasta, consultado_en=ahora_lima())
 
 
 @router.get('/resumen', response_model=ResumenMetricas)
@@ -115,7 +116,7 @@ def estado_camaras(id_zona: int | None = Query(default=None, ge=1),
     """Estado actual sobre la última transmisión de cada cámara; no expone URLs."""
     validar_ubicacion(db, id_zona, id_camara)
     procesamiento.expirar_inactivos(db)
-    ahora = datetime.now()
+    ahora = ahora_lima()
     return dict(consultado_en=ahora, inactividad_limite_seg=settings.MOTOR_INACTIVIDAD_SEG,
                 **metricas.paginar(db, metricas.estado_camaras(id_zona, id_camara, ahora),
                                   ['id_camara'], limite, desplazamiento))

@@ -1,4 +1,6 @@
 from datetime import datetime
+from hashlib import sha256
+from json import dumps
 
 from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -38,3 +40,8 @@ class Camara(Base):
     )
 
     zona: Mapped["Zona"] = relationship("Zona")
+
+    @property
+    def firma_captura(self) -> str:
+        config = (self.id_camara, self.id_zona, self.tipo, self.url_stream, self.zone_polygon, self.intervalo_muestreo_seg)
+        return sha256(dumps(config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

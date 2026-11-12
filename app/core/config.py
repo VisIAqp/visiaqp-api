@@ -6,11 +6,14 @@ entorno (.env). Usa pydantic-settings para validar tipos automáticamente.
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from sqlalchemy.engine import URL, make_url
 
 
 class Settings(BaseSettings):
     # Base de datos
     DATABASE_URL: str
+    DATABASE_HOST: str | None = None
+    DATABASE_PORT: int = 3306
     TEST_DATABASE_URL: str = ""
 
     # Autenticación
@@ -29,6 +32,13 @@ class Settings(BaseSettings):
     CONTEXTO_TIMEOUT_SEG: int = Field(default=8, ge=1, le=30)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def database_url(self) -> URL:
+        url = make_url(self.DATABASE_URL)
+        if self.DATABASE_HOST:
+            return url.set(host=self.DATABASE_HOST, port=self.DATABASE_PORT)
+        return url
 
 
 # Instancia única, reutilizada en toda la app

@@ -4,6 +4,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     String,
     Numeric,
     Text,
@@ -23,6 +24,7 @@ class Procesamiento(Base):
             ["camara.id_camara", "camara.id_zona"],
             name="fk_proc_camara_zona",
         ),
+        Index("ix_proc_camara_firma_fuente", "id_camara", "firma_captura", "tipo_fuente"),
     )
 
     id_procesamiento: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -33,6 +35,7 @@ class Procesamiento(Base):
         Enum("imagen", "video", "stream", name="proc_tipo_fuente"), nullable=False
     )
     ruta_archivo: Mapped[str | None] = mapped_column(String(255))
+    firma_captura: Mapped[str | None] = mapped_column(String(64))
     # EVENTO: cuándo se grabó / empezó el stream
     fecha_captura_inicio: Mapped[datetime] = mapped_column(nullable=False)
     # REGISTRO: cuándo lo procesó el sistema

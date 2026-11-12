@@ -1,8 +1,8 @@
 """Agregación y paginación en MySQL, sin cargar ventanas para sumarlas en Python."""
-from datetime import datetime
 
 from sqlalchemy import case, func, literal, select, text
 
+from app.core.tiempo import ahora_lima
 from app.models.camara import Camara
 from app.models.procesamiento import Procesamiento
 from app.models.resultado_deteccion import ResultadoDeteccion
@@ -77,7 +77,7 @@ def mediciones(agregado, tipo=None):
         intervalo = text('INTERVAL 1 HOUR' if tipo == 'hora' else 'INTERVAL 1 DAY')
         fin_periodo = func.date_add(a.periodo_inicio, intervalo)
         columnas.append(fin_periodo.label('periodo_fin'))
-        columnas.append((fin_periodo <= datetime.now()).label('periodo_cerrado'))
+        columnas.append((fin_periodo <= ahora_lima()).label('periodo_cerrado'))
     return select(
         *columnas, Zona.nombre.label('nombre_zona'),
         case((valido, promedio), else_=None).label('promedio_presentes'),

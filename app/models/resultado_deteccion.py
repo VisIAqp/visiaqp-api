@@ -1,10 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, Numeric, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint, func
+from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
+FECHA_PRECISA = DateTime().with_variant(DATETIME(fsp=6), "mysql")
 
 
 class ResultadoDeteccion(Base):
@@ -17,13 +20,14 @@ class ResultadoDeteccion(Base):
         ForeignKey("procesamiento.id_procesamiento", ondelete="CASCADE"),
         nullable=False,
     )
-    periodo_inicio: Mapped[datetime] = mapped_column(nullable=False)
-    periodo_fin: Mapped[datetime] = mapped_column(nullable=False)
+    periodo_inicio: Mapped[datetime] = mapped_column(FECHA_PRECISA, nullable=False)
+    periodo_fin: Mapped[datetime] = mapped_column(FECHA_PRECISA, nullable=False)
     cantidad_peatones: Mapped[int] = mapped_column(nullable=False)
     confianza_promedio: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     promedio_presentes: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     max_presentes: Mapped[int | None] = mapped_column()
     segundos_observados: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    recibido_en: Mapped[datetime | None] = mapped_column(FECHA_PRECISA)
     fecha_registro: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()
     )

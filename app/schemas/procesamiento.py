@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from app.core.config import settings
+from app.core.tiempo import hora_lima
 
 _CREDENCIALES = re.compile(r"(\w+://)[^/\s@]+@")
 
@@ -15,6 +16,9 @@ class ProcesamientoCreate(BaseModel):
     tipo_fuente: Literal["imagen", "video", "stream"]
     ruta_archivo: str | None = Field(default=None, max_length=255)
     fecha_captura_inicio: datetime
+    firma_captura: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    _fecha_lima = field_validator("fecha_captura_inicio")(hora_lima)
 
 
 class ProcesamientoCreado(BaseModel):
@@ -26,12 +30,22 @@ class ProcesamientoCierre(BaseModel):
     fecha_fin_proceso: datetime | None = None
     mensaje_error: str | None = None
 
+    @field_validator("fecha_fin_proceso")
+    @classmethod
+    def fecha_lima(cls, valor: datetime | None) -> datetime | None:
+        return hora_lima(valor) if valor is not None else None
+
 
 class ActividadMotor(BaseModel):
     ultima_muestra: datetime | None = None
     fps_procesamiento: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     # Edad desde la recepción local, no latencia desde el sensor de la cámara.
     retraso_seg: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+    @field_validator("ultima_muestra")
+    @classmethod
+    def fecha_lima(cls, valor: datetime | None) -> datetime | None:
+        return hora_lima(valor) if valor is not None else None
 
 
 class ProcesamientoCerrado(BaseModel):

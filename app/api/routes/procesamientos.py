@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.tiempo import ahora_lima
 from app.crud import camara as crud_camara
 from app.crud import procesamiento as crud_proc
 from app.models.usuario import Usuario
@@ -46,7 +47,7 @@ def solicitar_analisis(
     if camara is None or camara.estado != "activa":
         raise HTTPException(status_code=422, detail="La cámara no existe o no está activa")
 
-    if datos.fecha_captura_inicio > datetime.now() + timedelta(minutes=5):
+    if datos.fecha_captura_inicio > ahora_lima() + timedelta(minutes=5):
         raise HTTPException(status_code=422, detail="La fecha de captura no puede ser futura")
 
     if crud_proc.existe_activo(db, camara.id_camara, video.nombre_archivo):

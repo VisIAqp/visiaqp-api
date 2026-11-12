@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.camara import Camara
 from app.core.config import settings
+from app.core.tiempo import ahora_lima
 from app.models.procesamiento import Procesamiento
 from app.schemas.procesamiento import ProcesamientoCierre, ProcesamientoCreate
 from sqlalchemy import func, select, update
@@ -14,12 +15,18 @@ def obtener(db: Session, id_procesamiento: int) -> Procesamiento | None:
 
 def crear(db: Session, datos: ProcesamientoCreate) -> Procesamiento:
     # La fila de cámara serializa las reservas entre procesos e instancias.
+    firma = None
     if datos.tipo_fuente == "stream":
         if datos.id_camara is None:
             raise ValueError("Una transmisión requiere cámara")
-        camara_reservada = db.scalar(select(Camara).where(Camara.id_camara == datos.id_camara).with_for_update())
+        camara_reservada = db.scalar(select(Camara).where(Camara.id_camara == datos.id_camara)
+                                    .with_for_update().execution_options(populate_existing=True))
         if camara_reservada is None or camara_reservada.estado != "activa":
             raise ValueError("La cámara no está habilitada")
+        if datos.firma_captura is not None:
+            if datos.firma_captura != camara_reservada.firma_captura:
+                raise ValueError("Cambió la configuración de captura; actualiza el catálogo")
+            firma = datos.firma_captura
         _expirar(db, datos.id_camara)
         activo = db.scalar(select(Procesamiento.id_procesamiento).where(
             Procesamiento.id_camara == datos.id_camara,
@@ -27,14 +34,16 @@ def crear(db: Session, datos: ProcesamientoCreate) -> Procesamiento:
         ).with_for_update())
         if activo is not None:
             raise ValueError("La cámara ya está reservada por un motor activo")
-    proc = Procesamiento(**datos.model_dump(), estado="procesando", ultima_actividad=datetime.now())
+    ahora = ahora_lima()
+    proc = Procesamiento(**datos.model_dump(exclude={"firma_captura"}), firma_captura=firma,
+                         estado="procesando", ultima_actividad=ahora)
     db.add(proc)
 
     # Marca la última conexión de la cámara
     if datos.id_camara is not None:
         camara = db.get(Camara, datos.id_camara)
         if camara:
-            camara.ultima_conexion = datetime.now()
+            camara.ultima_conexion = ahora
 
     db.commit()
     db.refresh(proc)
@@ -45,7 +54,7 @@ def cerrar(db: Session, proc: Procesamiento, datos: ProcesamientoCierre) -> Proc
     if proc.estado != "procesando":
         # Un trabajador antiguo no puede convertir una ejecución vencida en éxito.
         return proc
-    fecha_fin = datos.fecha_fin_proceso or datetime.now()
+    fecha_fin = datos.fecha_fin_proceso or ahora_lima()
     # Evita violar el CHECK por diferencia de relojes entre motor y BD
     if fecha_fin < proc.fecha_inicio_proceso:
         fecha_fin = proc.fecha_inicio_proceso
@@ -147,7 +156,7 @@ def listar(
     return list(db.scalars(stmt))
 
 def _expirar(db: Session, id_camara: int | None = None):
-    ahora = datetime.now()
+    ahora = ahora_lima()
     stmt = update(Procesamiento).where(
         Procesamiento.estado == "procesando",
         func.coalesce(Procesamiento.ultima_actividad, Procesamiento.fecha_inicio_proceso)
@@ -174,16 +183,17 @@ def obtener_vigente(db: Session, id_procesamiento: int):
         Procesamiento.id_procesamiento == id_procesamiento).with_for_update().execution_options(populate_existing=True))
     if proc and proc.estado == "procesando":
         ultima = proc.ultima_actividad or proc.fecha_inicio_proceso
-        if (datetime.now() - ultima).total_seconds() > settings.MOTOR_INACTIVIDAD_SEG:
+        ahora = ahora_lima()
+        if (ahora - ultima).total_seconds() > settings.MOTOR_INACTIVIDAD_SEG:
             proc.estado = "error"
-            proc.fecha_fin_proceso = max(datetime.now(), proc.fecha_inicio_proceso)
+            proc.fecha_fin_proceso = max(ahora, proc.fecha_inicio_proceso)
             proc.mensaje_error = "Motor sin actividad: reserva vencida"
             db.commit()
     return proc
 
 
 def registrar_actividad(db: Session, proc: Procesamiento, datos=None):
-    proc.ultima_actividad = datetime.now()
+    proc.ultima_actividad = ahora_lima()
     if datos:
         for campo, valor in datos.model_dump(exclude_none=True).items():
             setattr(proc, campo, valor)

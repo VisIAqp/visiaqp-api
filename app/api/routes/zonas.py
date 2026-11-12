@@ -1,11 +1,12 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
 from app.core.database import get_db
+from app.core.tiempo import ahora_lima
 from app.crud import umbral_concentracion as crud_umbral
 from app.crud import zona as crud_zona
 from app.schemas.umbral_concentracion import UmbralIn, UmbralOut
@@ -86,7 +87,7 @@ def guardar_umbral(id_zona: int, datos: UmbralIn, db: Session = Depends(get_db))
 
     # El umbral ya está guardado: si el recálculo falla, no se revierte
     try:
-        hasta = datetime.now() + timedelta(hours=1)
+        hasta = ahora_lima() + timedelta(hours=1)
         desde = hasta - timedelta(hours=HORAS_RECALCULO)
         indicador_service.recalcular_rango(db, id_zona_umbral, desde, hasta)
     except Exception:

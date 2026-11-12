@@ -7,6 +7,7 @@ from app.models.resultado_deteccion import ResultadoDeteccion
 from app.models.indicador import Indicador
 from app.models.umbral_concentracion import UmbralConcentracion
 from app.models.video_disponible import VideoDisponible
+from app.models.pronostico import ModeloOcupacion, PronosticoOcupacion
 
 __all__ = [
     "Rol",
@@ -18,5 +19,7 @@ __all__ = [
     "Indicador",
     "UmbralConcentracion",
     "VideoDisponible",
+    "ModeloOcupacion",
+    "PronosticoOcupacion",
 ]
 from app.models.contexto import ClimaHora, EventoCalendario, SincronizacionContexto

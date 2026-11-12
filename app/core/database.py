@@ -8,7 +8,9 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.core.config import settings
 
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+url = settings.database_url
+connect_args = {"init_command": "SET time_zone = '-05:00'"} if url.get_driver_name() == "pymysql" else {}
+engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
