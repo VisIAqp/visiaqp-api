@@ -9,6 +9,7 @@ from app.models.indicador import Indicador
 from app.models.procesamiento import Procesamiento
 from app.models.resultado_deteccion import ResultadoDeteccion
 from app.models.umbral_concentracion import UmbralConcentracion
+from app.models.zona import Zona
 
 # Se usan si la zona aún no tiene umbral configurado
 UMBRAL_MEDIO_DEFECTO = 10
@@ -38,6 +39,13 @@ def _umbrales(db: Session, id_zona: int) -> tuple[int, int]:
     if umbral is None:
         return UMBRAL_MEDIO_DEFECTO, UMBRAL_ALTO_DEFECTO
     return umbral.umbral_medio, umbral.umbral_alto
+
+
+def bloquear_zona(db: Session, id_zona: int) -> bool:
+    # Varias horas de la misma zona pueden actualizar un mismo día.
+    return db.scalar(
+        select(Zona.id_zona).where(Zona.id_zona == id_zona).with_for_update()
+    ) is not None
 
 
 def recalcular(db: Session, id_zona: int, momento: datetime, tipo: str) -> bool:
@@ -132,12 +140,11 @@ def recalcular(db: Session, id_zona: int, momento: datetime, tipo: str) -> bool:
         fecha_calculo=func.now(),
     )
     db.execute(upsert)
-    db.commit()
     return True
 
 
 def actualizar_indicadores(db: Session, id_zona: int, momento: datetime) -> None:
-    """Se llama tras insertar un resultado: actualiza la hora y el día afectados."""
+    """Actualiza la hora y el día en la transacción del llamador."""
     recalcular(db, id_zona, momento, "hora")
     recalcular(db, id_zona, momento, "dia")
 
@@ -148,12 +155,18 @@ def recalcular_rango(db: Session, id_zona: int, desde: datetime, hasta: datetime
     actual = desde.replace(minute=0, second=0, microsecond=0)
     horas = 0
     dias_vistos: set[datetime] = set()
+    # Toma el snapshot después del bloqueo, incluso si el llamador ya hizo lecturas.
+    db.commit()
     while actual < hasta:
+        if not bloquear_zona(db, id_zona):
+            db.rollback()
+            break
         if recalcular(db, id_zona, actual, "hora"):
             horas += 1
             dia = actual.replace(hour=0)
             if dia not in dias_vistos:
                 recalcular(db, id_zona, actual, "dia")
                 dias_vistos.add(dia)
+        db.commit()
         actual += timedelta(hours=1)
     return horas

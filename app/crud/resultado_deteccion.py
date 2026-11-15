@@ -40,7 +40,6 @@ def crear(db: Session, id_procesamiento: int, datos: ResultadoCreate) -> Resulta
                     esperados[campo] = esperados[campo].replace(microsecond=0)
             if any(getattr(existente, campo) != valor for campo, valor in esperados.items()):
                 raise ValueError("La clave de ventana ya existe con datos diferentes")
-            db.commit()
             return existente
     resultado = ResultadoDeteccion(
         id_procesamiento=id_procesamiento,
@@ -49,6 +48,5 @@ def crear(db: Session, id_procesamiento: int, datos: ResultadoCreate) -> Resulta
         **valores,
     )
     db.add(resultado)
-    db.commit()
-    db.refresh(resultado)
+    db.flush()
     return resultado

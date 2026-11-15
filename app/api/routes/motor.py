@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-import logging
-
-from app.services import indicador_service
+from app.services import recalculo_indicadores
 from app.api.deps import verificar_api_key_motor
 from app.core.database import get_db
 from app.crud import camara as crud_camara
@@ -20,8 +18,6 @@ from app.schemas.resultado_deteccion import ResultadoCreado, ResultadoCreate
 from app.crud import video as crud_video
 from app.schemas.procesamiento import PendienteMotor
 from app.schemas.video import SincronizarRequest, SincronizarResultado
-
-logger = logging.getLogger(__name__)
 
 # Contrato con visiaqp-ai: NO cambiar rutas ni payloads sin avisar.
 router = APIRouter(tags=["motor"], dependencies=[Depends(verificar_api_key_motor)])
@@ -76,7 +72,7 @@ def registrar_resultado(
             detail="id_zona/id_camara no coinciden con el procesamiento",
         )
 
-    id_zona = proc.id_zona  # se lee antes del commit, que expira el objeto
+    id_zona = proc.id_zona
     crud_proc.registrar_actividad(db, proc)
     try:
         resultado = crud_resultado.crear(db, id_procesamiento, datos)
@@ -84,15 +80,11 @@ def registrar_resultado(
         db.rollback()
         raise HTTPException(status_code=409, detail=str(error))
     id_resultado = resultado.id_resultado
+    periodo_inicio = resultado.periodo_inicio
+    recalculo_indicadores.registrar_pendiente(db, id_resultado)
+    db.commit()
 
-    # El resultado ya está guardado: si el recálculo falla no se rompe el contrato con el motor
-    try:
-        indicador_service.actualizar_indicadores(
-            db, id_zona, datos.periodo_inicio.replace(microsecond=0)
-        )
-    except Exception:
-        db.rollback()
-        logger.exception("Falló el recálculo de indicadores (zona %s)", id_zona)
+    recalculo_indicadores.intentar(db, id_resultado, id_zona, periodo_inicio)
 
     return {"id_resultado": id_resultado}
 

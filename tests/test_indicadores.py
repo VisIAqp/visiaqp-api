@@ -4,8 +4,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from app.models import Indicador, UmbralConcentracion
-from app.services import indicador_service
+from app.core.tiempo import ahora_lima
+from app.models import Indicador, RecalculoIndicador, ResultadoDeteccion, UmbralConcentracion
+from app.services import indicador_service, recalculo_indicadores
 from app.services.indicador_service import clasificar
 
 
@@ -142,32 +143,51 @@ def test_sin_umbral_usa_valores_por_defecto(
 
 # ---------- Resiliencia ----------
 
-def test_si_falla_el_recalculo_el_resultado_se_guarda(
+def test_si_falla_el_recalculo_worker_recupera_hora_y_dia(
     client, motor_headers, datos_base, id_proc, abrir_sesion, monkeypatch
 ):
-    def _falla(*args, **kwargs):
-        raise RuntimeError("fallo simulado")
+    _enviar(client, motor_headers, datos_base, id_proc, 39, 30)
+    recalcular = indicador_service.recalcular
 
-    monkeypatch.setattr(indicador_service, "actualizar_indicadores", _falla)
+    def fallar_en_dia(db, id_zona, momento, tipo):
+        if tipo == "dia":
+            raise RuntimeError("fallo simulado al calcular el día")
+        return recalcular(db, id_zona, momento, tipo)
 
-    r = client.post(
-        f"/api/procesamientos/{id_proc}/resultados",
-        json={
-            "id_zona": datos_base["id_zona"],
-            "id_camara": datos_base["id_camara"],
-            "periodo_inicio": "2026-09-20T14:30:00",
-            "periodo_fin": "2026-09-20T14:30:10",
-            "cantidad_peatones": 20,
-        },
-        headers=motor_headers,
-    )
-    assert r.status_code == 201  # el motor no debe reintentar y duplicar
+    with monkeypatch.context() as cambios:
+        cambios.setattr(indicador_service, "recalcular", fallar_en_dia)
+        _enviar(client, motor_headers, datos_base, id_proc, 11, 31)
 
-    from app.models import ResultadoDeteccion
+    assert {i.total_peatones for i in _indicadores(abrir_sesion).values()} == {39}
+    with abrir_sesion() as db:
+        assert len(db.scalars(select(ResultadoDeteccion)).all()) == 2
+        pendiente = db.scalars(select(RecalculoIndicador)).one()
+        assert pendiente.intentos == 1
+
+    # El trabajador encuentra el pendiente con una sesión distinta, sin otro envío.
+    monkeypatch.setattr(recalculo_indicadores, "ahora_lima", lambda: pendiente.disponible_desde)
+    recalculo_indicadores.procesar_pendientes(abrir_sesion)
+    recalculo_indicadores.procesar_pendientes(abrir_sesion)
+
+    ind = _indicadores(abrir_sesion)
+    assert {tipo: fila.total_peatones for tipo, fila in ind.items()} == {"hora": 50, "dia": 50}
+    with abrir_sesion() as db:
+        assert db.scalars(select(RecalculoIndicador)).first() is None
+
+
+def test_si_falla_registrar_el_pendiente_se_revierte_la_medicion(
+    client, motor_headers, datos_base, id_proc, abrir_sesion, monkeypatch
+):
+    def fallar(*args):
+        raise RuntimeError("no se pudo guardar el pendiente")
+
+    monkeypatch.setattr(recalculo_indicadores, "registrar_pendiente", fallar)
+    with pytest.raises(RuntimeError, match="no se pudo guardar el pendiente"):
+        _enviar(client, motor_headers, datos_base, id_proc, 12, 30)
 
     with abrir_sesion() as db:
-        assert len(db.scalars(select(ResultadoDeteccion)).all()) == 1
-        assert db.scalars(select(Indicador)).first() is None
+        assert db.scalars(select(ResultadoDeteccion)).first() is None
+        assert db.scalars(select(RecalculoIndicador)).first() is None
 
 
 def test_resultado_al_final_de_la_hora_cuenta_en_esa_hora(

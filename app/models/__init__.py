@@ -5,6 +5,7 @@ from app.models.camara import Camara
 from app.models.procesamiento import Procesamiento
 from app.models.resultado_deteccion import ResultadoDeteccion
 from app.models.indicador import Indicador
+from app.models.recalculo_indicador import RecalculoIndicador
 from app.models.umbral_concentracion import UmbralConcentracion
 from app.models.video_disponible import VideoDisponible
 from app.models.pronostico import ModeloOcupacion, PronosticoOcupacion
@@ -17,6 +18,7 @@ __all__ = [
     "Procesamiento",
     "ResultadoDeteccion",
     "Indicador",
+    "RecalculoIndicador",
     "UmbralConcentracion",
     "VideoDisponible",
     "ModeloOcupacion",
