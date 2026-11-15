@@ -24,11 +24,12 @@ router = APIRouter(prefix="/procesamientos", tags=["procesamientos"])
 def listar_procesamientos(
     estado: Literal["pendiente", "procesando", "completado", "error"] | None = None,
     id_camara: int | None = None,
+    tipo_fuente: Literal["imagen", "video", "stream"] | None = None,
     limite: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: Usuario = Depends(get_current_user),
 ):
-    return crud_proc.listar(db, estado, id_camara, limite)
+    return crud_proc.listar(db, estado, id_camara, limite, tipo_fuente=tipo_fuente)
 
 
 @router.post(

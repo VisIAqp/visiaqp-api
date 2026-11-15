@@ -144,7 +144,8 @@ def crear_solicitud(
 
 
 def listar(
-    db: Session, estado: str | None, id_camara: int | None, limite: int
+    db: Session, estado: str | None, id_camara: int | None, limite: int,
+    *, tipo_fuente: str | None = None,
 ) -> list[Procesamiento]:
     expirar_inactivos(db)
     stmt = select(Procesamiento)
@@ -152,6 +153,8 @@ def listar(
         stmt = stmt.where(Procesamiento.estado == estado)
     if id_camara is not None:
         stmt = stmt.where(Procesamiento.id_camara == id_camara)
+    if tipo_fuente is not None:
+        stmt = stmt.where(Procesamiento.tipo_fuente == tipo_fuente)
     stmt = stmt.order_by(Procesamiento.id_procesamiento.desc()).limit(limite)
     return list(db.scalars(stmt))
 
