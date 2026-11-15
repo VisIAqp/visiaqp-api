@@ -102,6 +102,7 @@ class EstadoCamara(BaseModel):
     id_procesamiento: int | None
     ultima_actividad: datetime | None
     ultima_muestra: datetime | None
+    ultima_medicion: datetime | None = None
     segundos_sin_actividad: int | None
     fps_procesamiento: float | None
     edad_imagen_seg: float | None

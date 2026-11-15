@@ -1,6 +1,9 @@
 """Agregación y paginación en MySQL, sin cargar ventanas para sumarlas en Python."""
 
+from datetime import timedelta
+
 from sqlalchemy import case, func, literal, select, text
+from sqlalchemy.orm import aliased
 
 from app.core.tiempo import ahora_lima
 from app.models.camara import Camara
@@ -178,6 +181,21 @@ def estado_camaras(id_zona, id_camara, ahora):
     ).where(Procesamiento.tipo_fuente == 'stream').subquery()
     transmisiones = p
     p = transmisiones.c
+    desde = (ahora - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    ejecucion_medida = aliased(Procesamiento)
+    ultima_medicion = (
+        select(func.max(ResultadoDeteccion.periodo_fin))
+        .join(ejecucion_medida, ejecucion_medida.id_procesamiento == ResultadoDeteccion.id_procesamiento)
+        .where(
+            ejecucion_medida.id_camara == Camara.id_camara,
+            ejecucion_medida.tipo_fuente == 'stream',
+            ResultadoDeteccion.periodo_inicio >= desde,
+            ResultadoDeteccion.periodo_inicio <= ahora,
+            ResultadoDeteccion.promedio_presentes.is_not(None),
+        )
+        .correlate(Camara)
+        .scalar_subquery()
+    )
     estado = case(
         (Camara.estado != 'activa', 'deshabilitada'),
         (p.id_procesamiento.is_(None), 'sin_transmision'),
@@ -189,7 +207,8 @@ def estado_camaras(id_zona, id_camara, ahora):
         Camara.id_camara, Camara.id_zona, Camara.nombre.label('nombre_camara'),
         Zona.nombre.label('nombre_zona'), Camara.estado.label('estado_configuracion'),
         estado.label('estado_operativo'), p.id_procesamiento, p.ultima_actividad,
-        p.ultima_muestra, p.fps_procesamiento, p.retraso_seg.label('edad_imagen_seg'),
+        p.ultima_muestra, ultima_medicion.label('ultima_medicion'),
+        p.fps_procesamiento, p.retraso_seg.label('edad_imagen_seg'),
         func.greatest(0, func.timestampdiff(text('SECOND'), p.ultima_actividad, ahora)).label('segundos_sin_actividad'),
     ).join(Zona, Zona.id_zona == Camara.id_zona).outerjoin(
         transmisiones, (p.id_camara == Camara.id_camara) & (p.posicion == 1))
