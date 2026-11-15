@@ -87,6 +87,21 @@ class DistribucionNivel(BaseModel):
 T = TypeVar('T')
 
 
+class PuntoZona(BaseModel):
+    id_zona: int
+    nombre_zona: str
+    periodo_inicio: datetime
+    promedio_presentes: float
+    camaras_con_medicion: int
+
+
+class PatronZona(BaseModel):
+    dia_semana: int
+    hora: int
+    promedio_presentes: float
+    nivel_ocupacion: Literal['bajo', 'medio', 'alto']
+
+
 class PaginaMetricas(ContextoMetricas, Generic[T]):
     total: int
     limite: int

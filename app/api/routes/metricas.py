@@ -15,7 +15,7 @@ from app.models.procesamiento import Procesamiento
 from app.models.zona import Zona
 from app.schemas.metricas import (
     DistribucionNivel, FiltrosMetricas, MedicionAgregada, OcupacionReciente, PaginaCamaras,
-    PaginaMetricas, PatronHorario, PuntoSerie, ResumenMetricas,
+    PaginaMetricas, PatronHorario, PatronZona, PuntoSerie, PuntoZona, ResumenMetricas,
 )
 
 router = APIRouter(prefix='/metricas', tags=['metricas'], dependencies=[Depends(get_current_user)])
@@ -95,6 +95,38 @@ def ocupacion_reciente(filtros_origen: dict = Depends(seleccion), db: Session = 
     hasta = ahora_lima()
     f = FiltrosMetricas(desde=hasta - timedelta(minutes=60), hasta=hasta, **filtros_origen)
     return {**contexto(f), **metricas.ventanas_recientes(db, f, limite=500)}
+
+
+@router.get('/ocupacion-zonas', response_model=PaginaMetricas[PuntoZona])
+def ocupacion_zonas(
+    vista: Literal['historico', 'reciente', 'comparacion'] = 'historico',
+    f: FiltrosMetricas = Depends(filtros), limite: int = Query(default=200, ge=1, le=1000),
+    desplazamiento: int = Query(default=0, ge=0), db: Session = Depends(get_db),
+):
+    """Promedio entre cámaras con medición. Cada cámara tiene el mismo peso."""
+    fuente = f.tipo_fuente if f.id_procesamiento else f.tipo_fuente or 'stream'
+    cambios = {'tipo_fuente': fuente}
+    agrupacion = f.periodo
+    orden = ['periodo_inicio', 'id_zona']
+    if vista == 'reciente':
+        ahora = ahora_lima()
+        cambios.update(desde=ahora - timedelta(minutes=60), hasta=ahora)
+        agrupacion = 'minuto'
+        orden = ['-periodo_inicio', 'id_zona']
+    elif vista == 'comparacion':
+        agrupacion = None
+        orden = ['-promedio_presentes', 'id_zona']
+    f = f.model_copy(update=cambios)
+    return {**contexto(f), **metricas.paginar(db, metricas.ocupacion_zonas(f, agrupacion),
+        orden, limite, desplazamiento)}
+
+
+@router.get('/patrones-zona', response_model=list[PatronZona])
+def patrones_zona(f: FiltrosMetricas = Depends(filtros), db: Session = Depends(get_db)):
+    if f.id_zona is None:
+        raise HTTPException(status_code=422, detail='Selecciona una zona para consultar el patrón horario')
+    fuente = f.tipo_fuente if f.id_procesamiento else f.tipo_fuente or 'stream'
+    return metricas.patrones_zona(db, f.model_copy(update={'tipo_fuente': fuente}))
 
 
 @router.get('/comparativas', response_model=PaginaMetricas[MedicionAgregada])

@@ -30,7 +30,8 @@ def base_ventanas(f):
 
 
 def periodo(inicio, tipo):
-    formato = '%Y-%m-%d %H:00:00' if tipo == 'hora' else '%Y-%m-%d 00:00:00'
+    formato = {'minuto': '%Y-%m-%d %H:%i:00', 'hora': '%Y-%m-%d %H:00:00',
+               'dia': '%Y-%m-%d 00:00:00'}[tipo]
     return func.str_to_date(func.date_format(inicio, formato), '%Y-%m-%d %H:%i:%s')
 
 
@@ -118,6 +119,41 @@ def ventanas_recientes(db, f, limite):
     return dict(datos=list(reversed(filas[:limite])), limite=limite, tiene_mas=len(filas) > limite)
 
 
+def ocupacion_zonas(f, agrupacion):
+    b = base_ventanas(f).c
+    inicio = literal(f.desde) if agrupacion is None else periodo(b.periodo_inicio, agrupacion)
+    claves = (b.id_zona, b.id_camara) if agrupacion is None else (b.id_zona, b.id_camara, inicio)
+    camaras = select(
+        b.id_zona, inicio.label('periodo_inicio'),
+        (func.sum(b.promedio_presentes * b.segundos_observados) / func.sum(b.segundos_observados)).label('promedio'),
+    ).where(
+        b.id_camara.is_not(None), b.promedio_presentes.is_not(None), b.segundos_observados > 0,
+    ).group_by(*claves).subquery()
+    c = camaras.c
+    return select(
+        c.id_zona, Zona.nombre.label('nombre_zona'), c.periodo_inicio,
+        func.round(func.avg(c.promedio), 4).label('promedio_presentes'),
+        func.count().label('camaras_con_medicion'),
+    ).join(Zona, Zona.id_zona == c.id_zona).group_by(c.id_zona, Zona.nombre, c.periodo_inicio)
+
+
+def patrones_zona(db, f):
+    c = ocupacion_zonas(f, 'hora').subquery().c
+    dia = func.weekday(c.periodo_inicio)
+    hora = func.hour(c.periodo_inicio)
+    promedio = func.avg(c.promedio_presentes)
+    medio = func.coalesce(UmbralConcentracion.umbral_medio, 10)
+    alto = func.coalesce(UmbralConcentracion.umbral_alto, 30)
+    nivel = case((promedio >= alto, 'alto'), (promedio >= medio, 'medio'), else_='bajo')
+    consulta = select(
+        dia.label('dia_semana'), hora.label('hora'), func.round(promedio, 4).label('promedio_presentes'),
+        nivel.label('nivel_ocupacion'),
+    ).outerjoin(UmbralConcentracion, UmbralConcentracion.id_zona == c.id_zona).group_by(
+        c.id_zona, dia, hora, UmbralConcentracion.umbral_medio, UmbralConcentracion.umbral_alto,
+    )
+    return db.execute(consulta).mappings().all()
+
+
 def comparativas(f):
     b = base_ventanas(f)
     return mediciones(agrupar(b, [b.c.id_zona]))
@@ -140,7 +176,8 @@ def distribucion(f):
 def paginar(db, consulta, orden, limite, desplazamiento):
     subconsulta = consulta.subquery()
     total = db.scalar(select(func.count()).select_from(subconsulta))
-    filas = db.execute(select(subconsulta).order_by(*[subconsulta.c[n] for n in orden])
+    columnas = [subconsulta.c[n[1:]].desc() if n.startswith('-') else subconsulta.c[n] for n in orden]
+    filas = db.execute(select(subconsulta).order_by(*columnas)
                        .limit(limite).offset(desplazamiento)).mappings().all()
     return dict(total=total, limite=limite, desplazamiento=desplazamiento,
                 tiene_mas=desplazamiento + len(filas) < total, datos=filas)
