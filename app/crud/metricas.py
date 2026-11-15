@@ -36,11 +36,13 @@ def periodo(inicio, tipo):
 
 def agrupar(base, claves):
     c = base.c
+    ventana_medida = (c.promedio_presentes.is_not(None) & c.max_presentes.is_not(None)
+                      & (c.segundos_observados > 0))
     return select(
         *claves,
         func.count().label('cantidad_ventanas'),
         func.sum(c.cantidad_peatones).label('suma_identificadores'),
-        func.count(c.promedio_presentes).label('ventanas_con_ocupacion'),
+        func.count(case((ventana_medida, 1))).label('ventanas_con_ocupacion'),
         func.count(func.distinct(c.id_camara)).label('camaras_distintas'),
         func.count(c.id_camara).label('con_camara'),
         func.count(func.distinct(c.id_procesamiento)).label('procesamientos_distintos'),
@@ -48,13 +50,13 @@ def agrupar(base, claves):
         func.min(c.periodo_inicio).label('primera_ventana_inicio'),
         func.max(c.periodo_fin).label('ultima_ventana_fin'),
         func.max(c.fecha_registro).label('ultima_recepcion'),
-        func.sum(c.promedio_presentes * c.segundos_observados).label('personas_segundo'),
-        func.sum(c.segundos_observados).label('segundos'),
-        func.max(c.max_presentes).label('pico'),
+        func.sum(case((ventana_medida, c.promedio_presentes * c.segundos_observados))).label('personas_segundo'),
+        func.sum(case((ventana_medida, c.segundos_observados))).label('segundos'),
+        func.max(case((ventana_medida, c.max_presentes))).label('pico'),
     ).group_by(*claves).subquery()
 
 
-def mediciones(agregado, tipo=None):
+def mediciones(agregado, tipo=None, *, incluir_mediciones_parciales=False):
     a = agregado.c
     estado = case(
         (a.ventanas_con_ocupacion == 0, 'sin_datos'),
@@ -65,7 +67,10 @@ def mediciones(agregado, tipo=None):
         else_='disponible',
     )
     promedio = func.round(a.personas_segundo / func.nullif(a.segundos, 0), 4)
-    valido = (estado == 'disponible') & (a.segundos > 0)
+    completo = (estado == 'disponible') & (a.segundos > 0)
+    mostrar_medicion = completo
+    if incluir_mediciones_parciales:
+        mostrar_medicion = completo | ((estado == 'datos_incompletos') & (a.segundos > 0))
     nivel = case(
         (promedio >= func.coalesce(UmbralConcentracion.umbral_alto, 30), 'alto'),
         (promedio >= func.coalesce(UmbralConcentracion.umbral_medio, 10), 'medio'),
@@ -83,10 +88,10 @@ def mediciones(agregado, tipo=None):
         columnas.append((fin_periodo <= ahora_lima()).label('periodo_cerrado'))
     return select(
         *columnas, Zona.nombre.label('nombre_zona'),
-        case((valido, promedio), else_=None).label('promedio_presentes'),
-        case((valido, a.pico), else_=None).label('max_presentes'),
-        case((valido, a.segundos), else_=None).label('segundos_observados'),
-        case((valido, nivel), else_=None).label('nivel_ocupacion'),
+        case((mostrar_medicion, promedio), else_=None).label('promedio_presentes'),
+        case((mostrar_medicion, a.pico), else_=None).label('max_presentes'),
+        case((mostrar_medicion, a.segundos), else_=None).label('segundos_observados'),
+        case((completo, nivel), else_=None).label('nivel_ocupacion'),
         estado.label('estado_ocupacion'),
     ).join(Zona, Zona.id_zona == a.id_zona).outerjoin(
         UmbralConcentracion, UmbralConcentracion.id_zona == a.id_zona,
@@ -97,7 +102,7 @@ def series(f):
     b = base_ventanas(f)
     claves = [b.c.id_zona, b.c.id_camara, b.c.id_procesamiento, b.c.tipo_fuente,
               periodo(b.c.periodo_inicio, f.periodo).label('periodo_inicio')]
-    return mediciones(agrupar(b, claves), f.periodo)
+    return mediciones(agrupar(b, claves), f.periodo, incluir_mediciones_parciales=True)
 
 
 def comparativas(f):
