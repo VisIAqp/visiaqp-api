@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.crud import camara as crud_camara
 from app.crud import procesamiento as crud_proc
 from app.crud import resultado_deteccion as crud_resultado
+from app.models.procesamiento import Procesamiento
 from app.schemas.camara import CamaraMotor
 from app.schemas.procesamiento import (
     ActividadMotor,
@@ -14,7 +15,7 @@ from app.schemas.procesamiento import (
     ProcesamientoCreado,
     ProcesamientoCreate,
 )
-from app.schemas.resultado_deteccion import ResultadoCreado, ResultadoCreate
+from app.schemas.resultado_deteccion import ResultadoCreado, ResultadoCreate, ResultadoRecuperar
 from app.crud import video as crud_video
 from app.schemas.procesamiento import PendienteMotor
 from app.schemas.video import SincronizarRequest, SincronizarResultado
@@ -64,18 +65,48 @@ def registrar_resultado(
             status_code=409,
             detail=f"El procesamiento está en estado '{proc.estado}', no acepta resultados",
         )
+    _validar_origen(proc, datos)
+    crud_proc.registrar_actividad(db, proc)
+    return _guardar_resultado(db, proc, datos)
+
+
+@router.post(
+    "/procesamientos/{id_procesamiento}/resultados/recuperar",
+    response_model=ResultadoCreado,
+    status_code=status.HTTP_201_CREATED,
+)
+def recuperar_resultado(
+    id_procesamiento: int, datos: ResultadoRecuperar, db: Session = Depends(get_db)
+):
+    # La recuperación histórica no renueva ni modifica reservas de captura.
+    proc = crud_proc.bloquear(db, id_procesamiento)
+    if proc is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"codigo": "procesamiento_no_encontrado", "mensaje": "Procesamiento no encontrado"},
+        )
+    if proc.estado == "pendiente":
+        raise HTTPException(status_code=409, detail="El procesamiento aún no se ha iniciado")
+    _validar_origen(proc, datos, exigir_camara=True)
+    return _guardar_resultado(db, proc, datos)
+
+
+def _validar_origen(
+    proc: Procesamiento, datos: ResultadoCreate, *, exigir_camara: bool = False
+) -> None:
     if datos.id_zona != proc.id_zona or (
-        datos.id_camara is not None and datos.id_camara != proc.id_camara
+        (exigir_camara or datos.id_camara is not None) and datos.id_camara != proc.id_camara
     ):
         raise HTTPException(
             status_code=422,
             detail="id_zona/id_camara no coinciden con el procesamiento",
         )
 
+
+def _guardar_resultado(db: Session, proc: Procesamiento, datos: ResultadoCreate) -> dict:
     id_zona = proc.id_zona
-    crud_proc.registrar_actividad(db, proc)
     try:
-        resultado = crud_resultado.crear(db, id_procesamiento, datos)
+        resultado = crud_resultado.crear(db, proc.id_procesamiento, datos)
     except ValueError as error:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(error))

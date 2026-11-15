@@ -173,14 +173,22 @@ def expirar_inactivos(db: Session):
     db.commit()
 
 
+def bloquear(db: Session, id_procesamiento: int) -> Procesamiento | None:
+    return db.scalar(
+        select(Procesamiento)
+        .where(Procesamiento.id_procesamiento == id_procesamiento)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 def obtener_vigente(db: Session, id_procesamiento: int):
     referencia = db.execute(select(Procesamiento.id_camara, Procesamiento.tipo_fuente).where(
         Procesamiento.id_procesamiento == id_procesamiento)).first()
     if referencia and referencia.tipo_fuente == "stream" and referencia.id_camara is not None:
         # Mismo orden que crear(): cámara antes de procesamiento, para evitar interbloqueos.
         db.scalar(select(Camara).where(Camara.id_camara == referencia.id_camara).with_for_update())
-    proc = db.scalar(select(Procesamiento).where(
-        Procesamiento.id_procesamiento == id_procesamiento).with_for_update().execution_options(populate_existing=True))
+    proc = bloquear(db, id_procesamiento)
     if proc and proc.estado == "procesando":
         ultima = proc.ultima_actividad or proc.fecha_inicio_proceso
         ahora = ahora_lima()

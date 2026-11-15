@@ -38,5 +38,9 @@ class ResultadoCreate(BaseModel):
         return self
 
 
+class ResultadoRecuperar(ResultadoCreate):
+    clave_ventana: str = Field(min_length=1, max_length=36)
+
+
 class ResultadoCreado(BaseModel):
     id_resultado: int
