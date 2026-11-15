@@ -51,6 +51,26 @@ class PuntoSerie(MedicionAgregada):
     periodo_cerrado: bool
 
 
+class VentanaOcupacion(BaseModel):
+    id_resultado: int
+    id_zona: int
+    nombre_zona: str
+    id_camara: int | None
+    id_procesamiento: int
+    tipo_fuente: str
+    periodo_inicio: datetime
+    periodo_fin: datetime
+    promedio_presentes: float | None
+    max_presentes: int | None
+    segundos_observados: float | None
+
+
+class OcupacionReciente(ContextoMetricas):
+    datos: list[VentanaOcupacion]
+    limite: int
+    tiene_mas: bool
+
+
 class PatronHorario(MedicionAgregada):
     dia_semana: int  # Lunes=0, domingo=6.
     hora: int

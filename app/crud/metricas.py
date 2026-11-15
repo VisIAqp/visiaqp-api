@@ -16,7 +16,7 @@ from app.models.zona import Zona
 def base_ventanas(f):
     r, p = ResultadoDeteccion, Procesamiento
     consulta = select(
-        p.id_zona, p.id_camara, p.id_procesamiento, p.tipo_fuente,
+        r.id_resultado, p.id_zona, p.id_camara, p.id_procesamiento, p.tipo_fuente,
         r.periodo_inicio, r.periodo_fin, r.fecha_registro, r.cantidad_peatones,
         r.promedio_presentes, r.max_presentes, r.segundos_observados,
     ).join(p, p.id_procesamiento == r.id_procesamiento).where(
@@ -103,6 +103,19 @@ def series(f):
     claves = [b.c.id_zona, b.c.id_camara, b.c.id_procesamiento, b.c.tipo_fuente,
               periodo(b.c.periodo_inicio, f.periodo).label('periodo_inicio')]
     return mediciones(agrupar(b, claves), f.periodo, incluir_mediciones_parciales=True)
+
+
+def ventanas_recientes(db, f, limite):
+    b = base_ventanas(f).c
+    consulta = select(
+        b.id_resultado, b.id_zona, Zona.nombre.label('nombre_zona'),
+        b.id_camara, b.id_procesamiento, b.tipo_fuente, b.periodo_inicio, b.periodo_fin,
+        b.promedio_presentes, b.max_presentes, b.segundos_observados,
+    ).join(Zona, Zona.id_zona == b.id_zona).order_by(
+        b.periodo_inicio.desc(), b.id_resultado.desc(),
+    ).limit(limite + 1)
+    filas = db.execute(consulta).mappings().all()
+    return dict(datos=list(reversed(filas[:limite])), limite=limite, tiene_mas=len(filas) > limite)
 
 
 def comparativas(f):

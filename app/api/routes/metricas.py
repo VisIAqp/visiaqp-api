@@ -14,7 +14,7 @@ from app.models.camara import Camara
 from app.models.procesamiento import Procesamiento
 from app.models.zona import Zona
 from app.schemas.metricas import (
-    DistribucionNivel, FiltrosMetricas, MedicionAgregada, PaginaCamaras,
+    DistribucionNivel, FiltrosMetricas, MedicionAgregada, OcupacionReciente, PaginaCamaras,
     PaginaMetricas, PatronHorario, PuntoSerie, ResumenMetricas,
 )
 
@@ -32,14 +32,30 @@ def validar_ubicacion(db, id_zona, id_camara):
             raise HTTPException(status_code=422, detail='La cámara no pertenece a la zona indicada')
 
 
-def filtros(
-    desde: datetime | None = None, hasta: datetime | None = None,
-    periodo: Literal['hora', 'dia'] = 'hora',
+def seleccion(
     id_zona: int | None = Query(default=None, ge=1),
     id_camara: int | None = Query(default=None, ge=1),
     id_procesamiento: int | None = Query(default=None, ge=1),
     tipo_fuente: Literal['imagen', 'video', 'stream'] | None = None,
     db: Session = Depends(get_db),
+):
+    validar_ubicacion(db, id_zona, id_camara)
+    if id_procesamiento is not None:
+        proc = db.get(Procesamiento, id_procesamiento)
+        if proc is None:
+            raise HTTPException(status_code=404, detail='Procesamiento no encontrado')
+        if ((id_zona is not None and proc.id_zona != id_zona) or
+            (id_camara is not None and proc.id_camara != id_camara) or
+            (tipo_fuente is not None and proc.tipo_fuente != tipo_fuente)):
+            raise HTTPException(status_code=422, detail='Los filtros no corresponden al procesamiento')
+    return dict(id_zona=id_zona, id_camara=id_camara, id_procesamiento=id_procesamiento,
+                tipo_fuente=tipo_fuente)
+
+
+def filtros(
+    desde: datetime | None = None, hasta: datetime | None = None,
+    periodo: Literal['hora', 'dia'] = 'hora',
+    filtros_origen: dict = Depends(seleccion),
 ):
     hasta = hasta or ahora_lima()
     if hasta.year < 1000:
@@ -51,18 +67,7 @@ def filtros(
         raise HTTPException(status_code=422, detail='Envía las fechas en hora de Lima, sin zona horaria explícita')
     if hasta <= desde or hasta - desde > timedelta(days=31):
         raise HTTPException(status_code=422, detail='El rango debe ser positivo y no superar 31 días')
-    validar_ubicacion(db, id_zona, id_camara)
-    if id_procesamiento is not None:
-        proc = db.get(Procesamiento, id_procesamiento)
-        if proc is None:
-            raise HTTPException(status_code=404, detail='Procesamiento no encontrado')
-        if ((id_zona is not None and proc.id_zona != id_zona) or
-            (id_camara is not None and proc.id_camara != id_camara) or
-            (tipo_fuente is not None and proc.tipo_fuente != tipo_fuente)):
-            raise HTTPException(status_code=422, detail='Los filtros no corresponden al procesamiento')
-    return FiltrosMetricas(desde=desde, hasta=hasta, periodo=periodo, id_zona=id_zona,
-                          id_camara=id_camara, id_procesamiento=id_procesamiento,
-                          tipo_fuente=tipo_fuente)
+    return FiltrosMetricas(desde=desde, hasta=hasta, periodo=periodo, **filtros_origen)
 
 
 def contexto(f):
@@ -82,6 +87,14 @@ def series(f: FiltrosMetricas = Depends(filtros), limite: int = Query(default=50
     """Una serie por zona, cámara, fuente y ejecución. No rellena huecos con ceros."""
     return {**contexto(f), **metricas.paginar(db, metricas.series(f),
         ['periodo_inicio', 'id_zona', 'id_camara', 'id_procesamiento'], limite, desplazamiento)}
+
+
+@router.get('/ocupacion-reciente', response_model=OcupacionReciente)
+def ocupacion_reciente(filtros_origen: dict = Depends(seleccion), db: Session = Depends(get_db)):
+    """Ventanas individuales iniciadas en los últimos 60 minutos según el servidor."""
+    hasta = ahora_lima()
+    f = FiltrosMetricas(desde=hasta - timedelta(minutes=60), hasta=hasta, **filtros_origen)
+    return {**contexto(f), **metricas.ventanas_recientes(db, f, limite=500)}
 
 
 @router.get('/comparativas', response_model=PaginaMetricas[MedicionAgregada])
